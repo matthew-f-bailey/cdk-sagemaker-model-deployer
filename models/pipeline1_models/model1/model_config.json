@@ -1,0 +1,14 @@
+{
+    "type": "model",
+    "model": {
+        "core_name": "xgb-trained",
+        "version": "v0-0-1",
+        "framework": "xgboost",
+        "filename": ""
+    },
+    "docker": {
+        "requirements": ["sagemaker==2.192.1", "pandas==2.0.3"],
+        "entrypoint": "inference.py",
+        "base_image": "257758044811.dkr.ecr.us-east-2.amazonaws.com/sagemaker-xgboost:1.7-1"
+    }
+}

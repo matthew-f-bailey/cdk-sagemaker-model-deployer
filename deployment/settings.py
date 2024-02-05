@@ -1,0 +1,2 @@
+MODEL_ARTIFACT_BUCKET = "my-bucket"
+MODEL_ARTIFACT_PREFIX = "models"

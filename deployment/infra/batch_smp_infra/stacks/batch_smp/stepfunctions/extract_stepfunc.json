@@ -1,0 +1,174 @@
+{
+    "Comment": "Batch SMP Pipeline - Extracts from DB, Exports to S3, Starts SMP",
+    "StartAt": "CheckForRecentSnapshot",
+    "States": {
+      "CheckForRecentSnapshot": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "OutputPath": "$.Payload",
+        "Parameters":{}
+        },
+        "Next": "IsRecentAvailable"
+      },
+      "IsRecentAvailable": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.takeSnapshot",
+            "NumericGreaterThan": 0,
+            "Comment": "Recent Snapshot Available",
+            "Next": "CreateDBSnapshot"
+          }
+        ],
+        "Default": "StartPipelineExecutionImmediately"
+      },
+      "CreateDBSnapshot": {
+        "Type": "Task",
+        "Next": "Wait For Snapshot Completion",
+        "Parameters": {
+          "DbInstanceIdentifier": "bta-football",
+          "DbSnapshotIdentifier.$": "$.snapshotId"
+        },
+        "Resource": "arn:aws:states:::aws-sdk:rds:createDBSnapshot",
+        "ResultPath": null,
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "States.ALL"
+            ],
+            "BackoffRate": 2,
+            "IntervalSeconds": 30,
+            "MaxAttempts": 4,
+            "Comment": "Retry for DB Maintence"
+          }
+        ]
+      },
+      "Wait For Snapshot Completion": {
+        "Type": "Wait",
+        "Seconds": 120,
+        "Next": "StartExportTask"
+      },
+      "StartExportTask": {
+        "Type": "Task",
+        "Parameters": {
+          "ExportTaskIdentifier.$": "$.snapshotId",
+          "IamRoleArn.$": "$.exportIamRoleArn",
+          "KmsKeyId.$": "$.exportKmsKey",
+          "S3BucketName.$": "$.exportBucketName",
+          "SourceArn.$": "States.Format('snapshot:{}', $.snapshotId)",
+          "ExportOnly": [...]
+        },
+        "Resource": "arn:aws:states:::aws-sdk:rds:startExportTask",
+        "Next": "ListObjectsV2",
+        "ResultPath": null,
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "States.ALL"
+            ],
+            "BackoffRate": 1,
+            "IntervalSeconds": 30,
+            "MaxAttempts": 10,
+            "Comment": "Poll for snapshot to be completed"
+          }
+        ]
+      },
+      "ListObjectsV2": {
+        "Type": "Task",
+        "Next": "Completed Export?",
+        "Parameters": {
+          "Bucket.$": "$.exportBucketName",
+          "Prefix.$": "States.Format('{}/', $.snapshotId)",
+          "Delimiter": "/",
+          "MaxKeys": 1
+        },
+        "Resource": "arn:aws:states:::aws-sdk:s3:listObjectsV2",
+        "ResultPath": "$.result"
+      },
+      "Completed Export?": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.result.KeyCount",
+            "NumericGreaterThan": 0,
+            "Comment": "Contents are found",
+            "Next": "StartPipelineExecutionAfterDB"
+          }
+        ],
+        "Default": "Wait For Export Completion"
+      },
+      "Wait For Export Completion": {
+        "Type": "Wait",
+        "Seconds": 600,
+        "Next": "ListObjectsV2"
+      },
+      "StartPipelineExecutionImmediately": {
+        "Type": "Task",
+        "Parameters": {
+          "ClientRequestToken.$": "States.Format('nfl-moneyline-pipeline-execution-snapshot:{}', $.uniqueSmToken)",
+          "PipelineName.$": "$.pipelineName",
+          "PipelineParameters": [
+            {
+              "Name": "snapshotId",
+              "Value.$": "$.snapshotId"
+            },
+            {
+              "Name": "inputFile",
+              "Value.$": "$.inputFile"
+            },
+            {
+              "Name": "inputBucket",
+              "Value.$": "$.exportBucketName"
+            }
+          ]
+        },
+        "Resource": "arn:aws:states:::aws-sdk:sagemaker:startPipelineExecution",
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "States.ALL"
+            ],
+            "BackoffRate": 1,
+            "IntervalSeconds": 300,
+            "MaxAttempts": 5,
+            "Comment": "Poll for s3 files to be written "
+          }
+        ],
+        "End": true
+      },
+      "StartPipelineExecutionAfterDB": {
+        "Type": "Task",
+        "Parameters": {
+          "ClientRequestToken.$": "States.Format('nfl-moneyline-pipeline-execution-snapshot:{}', $.uniqueSmToken)",
+          "PipelineName.$": "$.pipelineName",
+          "PipelineParameters": [
+            {
+              "Name": "snapshotId",
+              "Value.$": "$.snapshotId"
+            },
+            {
+              "Name": "inputFile",
+              "Value.$": "$.inputFile"
+            },
+            {
+              "Name": "inputBucket",
+              "Value.$": "$.exportBucketName"
+            }
+          ]
+        },
+        "Resource": "arn:aws:states:::aws-sdk:sagemaker:startPipelineExecution",
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "States.ALL"
+            ],
+            "BackoffRate": 1,
+            "IntervalSeconds": 300,
+            "MaxAttempts": 5,
+            "Comment": "Poll for s3 files to be written "
+          }
+        ],
+        "End": true
+      }
+    }
+  }

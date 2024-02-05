@@ -1,0 +1,21 @@
+# Basic project info
+[project]
+name = "sm-pipeline-deployer"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+# Black formatting
+[tool.black]
+line-length = 88
+
+# Testing and coverage
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
